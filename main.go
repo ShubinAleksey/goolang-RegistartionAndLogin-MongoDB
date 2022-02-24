@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -61,31 +60,6 @@ func main() {
 	}
 	r := gin.Default()
 	r.POST("/registration", JSONregistration)
-	r.GET("/allregistered", func(c *gin.Context) {
-		var w http.ResponseWriter = c.Writer
-		var r *http.Request = c.Request
-		w.Header().Add("content-type", "application/json")
-		var users []User
-		json.NewDecoder(r.Body).Decode(&users)
-		cursor, err := collection.Find(ctx, bson.M{})
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(`{ "Ошибка": "` + err.Error() + `"}`))
-			return
-		}
-		defer cursor.Close(ctx)
-		for cursor.Next(ctx) {
-			var user User
-			cursor.Decode(&user)
-			users = append(users, user)
-		}
-		if err := cursor.Err(); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(`{ "Ошибка": "` + err.Error() + `"}`))
-			return
-		}
-		json.NewEncoder(w).Encode(users)
-	})
 	r.GET("/login", JSONLogin)
 	r.Run()
 }
