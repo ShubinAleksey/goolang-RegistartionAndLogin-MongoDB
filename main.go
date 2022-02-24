@@ -21,37 +21,52 @@ type User struct {
 	Password string             `json:"password,omitempty" bson:"password,omitempty" validate:"min=6,max=50"`
 }
 
-var client *mongo.Client
+var user User
+var ctx, cancel = context.WithTimeout(context.Background(), 25*time.Second)
+var client, erring = mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
+var collection = client.Database("theregistrdeveloper").Collection("user")
+
+func JSONregistration(c *gin.Context) {
+	c.Writer.Header().Add("content-type", "application/json")
+	json.NewDecoder(c.Request.Body).Decode(&user)
+	ctx, _ := context.WithTimeout(context.Background(), 25*time.Second)
+	if err := validator.Validate(user); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"Ошибка": err.Error(),
+		})
+	} else {
+		collection.InsertOne(ctx, user)
+		json.NewEncoder(c.Writer).Encode(http.StatusOK)
+	}
+}
+
+func JSONLogin(c *gin.Context) {
+	c.Writer.Header().Add("content-type", "application/json")
+	json.NewDecoder(c.Request.Body).Decode(&user)
+	ctx, _ := context.WithTimeout(context.Background(), 25*time.Second)
+	err := collection.FindOne(ctx, user).Decode(&user)
+	if err != nil {
+		c.Writer.WriteHeader(http.StatusInternalServerError)
+		c.Writer.Write([]byte(`{ "Ошибка": "` + err.Error() + `"}`))
+		return
+	} else {
+		json.NewEncoder(c.Writer).Encode(http.StatusOK)
+	}
+}
 
 func main() {
-	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-	client, _ = mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
+	defer cancel()
+	if erring != nil {
+		return
+	}
 	r := gin.Default()
-	r.POST("/registration", func(c *gin.Context) {
-		var w http.ResponseWriter = c.Writer
-		var r *http.Request = c.Request
-		w.Header().Add("content-type", "application/json")
-		var user User
-		json.NewDecoder(r.Body).Decode(&user)
-		collection := client.Database("theregistrdeveloper").Collection("user")
-		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-		if err := validator.Validate(user); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"Ошибка": err.Error(),
-			})
-		} else {
-			collection.InsertOne(ctx, user)
-			json.NewEncoder(w).Encode(http.StatusOK)
-		}
-	})
+	r.POST("/registration", JSONregistration)
 	r.GET("/allregistered", func(c *gin.Context) {
 		var w http.ResponseWriter = c.Writer
 		var r *http.Request = c.Request
 		w.Header().Add("content-type", "application/json")
 		var users []User
 		json.NewDecoder(r.Body).Decode(&users)
-		collection := client.Database("theregistrdeveloper").Collection("user")
-		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 		cursor, err := collection.Find(ctx, bson.M{})
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -71,22 +86,6 @@ func main() {
 		}
 		json.NewEncoder(w).Encode(users)
 	})
-	r.GET("/login", func(c *gin.Context) {
-		var w http.ResponseWriter = c.Writer
-		var r *http.Request = c.Request
-		w.Header().Add("content-type", "application/json")
-		var user User
-		json.NewDecoder(r.Body).Decode(&user)
-		collection := client.Database("theregistrdeveloper").Collection("user")
-		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-		err := collection.FindOne(ctx, user).Decode(&user)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(`{ "Ошибка": "` + err.Error() + `"}`))
-			return
-		} else {
-			json.NewEncoder(w).Encode(http.StatusOK)
-		}
-	})
+	r.GET("/login", JSONLogin)
 	r.Run()
 }
